@@ -241,4 +241,72 @@ ORDER BY customers DESC;
 -- Delivery performance is a key driver of retention and lifetime value.
 
 
+-- =====================================================
+-- SELLER CONCENTRATION AND RISK
+-- =====================================================
+
+-- Revenue contribution by seller
+WITH seller_revenue AS (
+  SELECT
+    oi.seller_id,
+    ROUND(SUM(p.payment_value), 2) AS total_revenue,
+    COUNT(DISTINCT o.order_id) AS total_orders
+  FROM olist_order_items_dataset oi
+  JOIN olist_orders_dataset o
+    ON oi.order_id = o.order_id
+  JOIN olist_order_payments_dataset p
+    ON o.order_id = p.order_id
+  WHERE o.order_status = 'delivered'
+  GROUP BY oi.seller_id
+),
+
+ranked_sellers AS (
+  SELECT
+    seller_id,
+    total_revenue,
+    total_orders,
+    NTILE(5) OVER (ORDER BY total_revenue DESC) AS revenue_bucket
+  FROM seller_revenue
+)
+
+SELECT
+  revenue_bucket,
+  COUNT(DISTINCT seller_id) AS sellers,
+  ROUND(SUM(total_revenue), 2) AS revenue
+FROM ranked_sellers
+GROUP BY revenue_bucket
+ORDER BY revenue_bucket;
+
+-- Seller delivery delay risk
+WITH seller_delays AS (
+  SELECT
+    oi.seller_id,
+    DATE_DIFF(
+      'day',
+      o.order_estimated_delivery_date,
+      o.order_delivered_customer_date
+    ) AS delay_days
+  FROM olist_order_items_dataset oi
+  JOIN olist_orders_dataset o
+    ON oi.order_id = o.order_id
+  WHERE o.order_status = 'delivered'
+    AND o.order_delivered_customer_date IS NOT NULL
+    AND o.order_estimated_delivery_date IS NOT NULL
+)
+
+SELECT
+  CASE
+    WHEN delay_days <= 0 THEN 'On-time or Early'
+    WHEN delay_days BETWEEN 1 AND 3 THEN '1–3 Days Late'
+    WHEN delay_days BETWEEN 4 AND 7 THEN '4–7 Days Late'
+    ELSE '8+ Days Late'
+  END AS delay_bucket,
+  COUNT(DISTINCT seller_id) AS sellers
+FROM seller_delays
+GROUP BY delay_bucket
+ORDER BY sellers DESC;
+
+-- NOTES:
+-- Revenue concentration exposes the business to seller-level risk.
+-- High-revenue sellers with frequent delivery delays can disproportionately harm retention.
 
