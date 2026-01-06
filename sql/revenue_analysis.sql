@@ -89,3 +89,51 @@ ORDER BY revenue_bucket;
 
 
 
+-- =====================================================
+-- CUSTOMER RETENTION & REPEAT BEHAVIOR
+-- =====================================================
+
+-- Orders per customer (repeat behavior)
+SELECT
+  orders_per_customer,
+  COUNT(*) AS customer_count
+FROM (
+  SELECT
+    c.customer_unique_id,
+    COUNT(DISTINCT o.order_id) AS orders_per_customer
+  FROM olist_orders_dataset o
+  JOIN olist_customers_dataset c
+    ON o.customer_id = c.customer_id
+  WHERE o.order_status = 'delivered'
+  GROUP BY c.customer_unique_id
+) t
+GROUP BY orders_per_customer
+ORDER BY orders_per_customer;
+
+
+-- Percentage of one-time vs repeat customers
+SELECT
+  CASE
+    WHEN order_count = 1 THEN 'One-time'
+    ELSE 'Repeat'
+  END AS customer_type,
+  COUNT(*) AS customers
+FROM (
+  SELECT
+    c.customer_unique_id,
+    COUNT(DISTINCT o.order_id) AS order_count
+  FROM olist_orders_dataset o
+  JOIN olist_customers_dataset c
+    ON o.customer_id = c.customer_id
+  WHERE o.order_status = 'delivered'
+  GROUP BY c.customer_unique_id
+) x
+GROUP BY customer_type;
+
+-- NOTES:
+-- A high proportion of one-time customers indicates acquisition-driven growth.
+-- Improving repeat rate typically has a stronger revenue impact than acquiring new users.
+
+
+
+
