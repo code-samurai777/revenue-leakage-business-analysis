@@ -186,3 +186,59 @@ ORDER BY ca.cohort_month, month_number;
 -- Improving early retention has a compounding revenue impact.
 -- Later-month retention reflects true customer loyalty.
 
+
+
+-- =====================================================
+-- DELIVERY DELAYS AND CUSTOMER BEHAVIOR
+-- =====================================================
+
+-- Delivery delay in days per order
+WITH delivery_delay AS (
+  SELECT
+    o.order_id,
+    c.customer_unique_id,
+    DATE_DIFF(
+      'day',
+      o.order_estimated_delivery_date,
+      o.order_delivered_customer_date
+    ) AS delay_days
+  FROM olist_orders_dataset o
+  JOIN olist_customers_dataset c
+    ON o.customer_id = c.customer_id
+  WHERE o.order_status = 'delivered'
+    AND o.order_delivered_customer_date IS NOT NULL
+    AND o.order_estimated_delivery_date IS NOT NULL
+),
+
+customer_orders AS (
+  SELECT
+    customer_unique_id,
+    COUNT(DISTINCT order_id) AS total_orders
+  FROM olist_orders_dataset o
+  JOIN olist_customers_dataset c
+    ON o.customer_id = c.customer_id
+  WHERE o.order_status = 'delivered'
+  GROUP BY customer_unique_id
+)
+
+SELECT
+  CASE
+    WHEN d.delay_days <= 0 THEN 'On-time or Early'
+    WHEN d.delay_days BETWEEN 1 AND 3 THEN '1–3 Days Late'
+    WHEN d.delay_days BETWEEN 4 AND 7 THEN '4–7 Days Late'
+    ELSE '8+ Days Late'
+  END AS delivery_bucket,
+  COUNT(DISTINCT d.customer_unique_id) AS customers,
+  ROUND(AVG(co.total_orders), 2) AS avg_orders_per_customer
+FROM delivery_delay d
+JOIN customer_orders co
+  ON d.customer_unique_id = co.customer_unique_id
+GROUP BY delivery_bucket
+ORDER BY customers DESC;
+
+-- NOTES:
+-- Customers facing longer delivery delays tend to place fewer repeat orders.
+-- Delivery performance is a key driver of retention and lifetime value.
+
+
+
